@@ -1,0 +1,9 @@
+.{
+    .name = .n,
+    .version = "1.0.0",
+    .minimum_zig_version = "0.15.1",
+    .paths = .{
+        "build.zig",
+    },
+    .fingerprint = 0x7808a3d275d417e4,
+}
