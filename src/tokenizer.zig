@@ -2,8 +2,16 @@
 
 pub const Token = struct {
     tag: Tag,
-    start: u32,
-    len: u32,
+    span: Span,
+
+    pub const Span = struct {
+        start: u32,
+        len: u32,
+
+        pub fn init(start: u32, len: u32) Span {
+            return .{ .start = start, .len = len };
+        }
+    };
 
     pub const Tag = enum {
         identifier,
@@ -63,8 +71,7 @@ pub fn tokenize(allocator: std.mem.Allocator, source: []const u8) std.mem.Alloca
                 };
                 try tokens.append(allocator, .{
                     .tag = tag,
-                    .start = @intCast(start_idx),
-                    .len = @intCast(end_idx - start_idx),
+                    .span = .init(@intCast(start_idx), @intCast(end_idx - start_idx)),
                 });
             },
         }

@@ -18,14 +18,12 @@ pub fn main() void {
     std.debug.print("tokens found: {d}\n", .{tokens.len});
 
     const tags = tokens.items(.tag);
-    const starts = tokens.items(.start);
-    const lens = tokens.items(.len);
+    const spans = tokens.items(.span);
 
     for (0..tokens.len) |i| {
         const token_tag = tags[i];
-        const token_start = starts[i];
-        const token_len = lens[i];
-        const token_slice = source[token_start..][0..token_len];
+        const token_span = spans[i];
+        const token_slice = source[token_span.start..][0..token_span.len];
 
         std.debug.print("  - {[tag]s:12} `{[slice]s}`\n", .{
             .tag = @tagName(token_tag),
