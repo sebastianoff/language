@@ -2,7 +2,38 @@
 tokens: std.MultiArrayList(tokenizer.Token) = .empty,
 nodes: std.ArrayList(Node) = .empty,
 
-pub const init: Ast = .{};
+pub fn init(tokens: std.MultiArrayList(tokenizer.Token)) Ast {
+    return .{ .tokens = tokens };
+}
+
+pub fn initRoot(allocator: std.mem.Allocator, source: []const u8) !Ast {
+    // tokenize
+    const tokens = try tokenizer.tokenize(allocator, source);
+    // parse
+    var ast: Ast = .init(tokens);
+    errdefer ast.deinit(allocator);
+    var parse: Parse = .init(&ast);
+    // root @ 0.
+    const root_index = try parse.appendNode(allocator, .{
+        .tag = .root,
+        .token_start = 0,
+        .token_len = 0, // will be updated
+        .data = .{ .list = .{ .start = 0, .len = 0 } }, // will be updated
+    });
+    std.debug.assert(root_index == 0);
+
+    const list_start_index: u32 = @intCast(parse.ast.nodes.items.len);
+    while (!parse.atEnd()) {
+        _ = try parse.statement(allocator);
+    }
+    const list_end_index: u32 = @intCast(parse.ast.nodes.items.len);
+
+    parse.ast.nodes.items[0].data.list.start = list_start_index;
+    parse.ast.nodes.items[0].data.list.len = @intCast(list_end_index - list_start_index);
+    parse.ast.nodes.items[0].token_len = @intCast(parse.tokens.len);
+
+    return ast;
+}
 
 pub fn deinit(ast: *Ast, allocator: std.mem.Allocator) void {
     ast.tokens.deinit(allocator);
@@ -51,4 +82,5 @@ pub const Node = struct {
 
 const tokenizer = @import("tokenizer.zig");
 const std = @import("std");
+const Parse = @import("Parse.zig");
 const Ast = @This();

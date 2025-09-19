@@ -1,10 +1,10 @@
-pub fn main() void {
+pub fn main() !void {
     std.debug.print("{[version]s} (Zig {[zig_version]s}; {[mode]s})\n", .{
         .version = libn.version_string,
         .zig_version = builtin.zig_version_string,
         .mode = @tagName(builtin.mode),
     });
-    const source = "var hello_123 = 456; // an unknown token type";
+    const source = "hello_123 = 456; // an unknown token type";
     const allocator = std.heap.page_allocator;
 
     std.debug.print("source:\n---\n{s}\n---\n", .{source});
@@ -30,6 +30,9 @@ pub fn main() void {
             .slice = token_slice,
         });
     }
+
+    var ast: libn.Ast = try .initRoot(allocator, source);
+    defer ast.deinit(allocator);
 }
 
 const libn = @import("libn");
