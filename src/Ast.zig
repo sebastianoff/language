@@ -32,11 +32,19 @@ pub fn initRoot(allocator: std.mem.Allocator, source: []const u8) !Ast {
     parse.ast.nodes.items[0].data.list.len = @intCast(list_end_index - list_start_index);
     parse.ast.nodes.items[0].token_len = @intCast(parse.tokens.len);
 
-    if (parse.diagnostics.items.len > 0) {
-        std.log.err("parsing failed with {[errors]d} errors:", .{ .errors = parse.diagnostics.items.len });
-    }
-    for (parse.diagnostics.items) |diagnostic| {
-        std.log.err("{[diagnostic]s}", .{ .diagnostic = @tagName(diagnostic.tag) });
+    // errors
+    {
+        var map: Diagnostic.Map = try .init(allocator, source);
+        defer map.deinit(allocator);
+        for (parse.diagnostics.items) |diagnostic| {
+            const span = ast.tokens.items(.span)[diagnostic.index];
+            const loc = map.lookup(span.start);
+            std.log.err("{[line]d}:{[col]d}: error: {[diagnostic]s}", .{
+                .line = loc.line,
+                .col = loc.col,
+                .diagnostic = @tagName(diagnostic.tag),
+            });
+        }
     }
 
     return ast;
@@ -91,4 +99,5 @@ pub const Node = struct {
 const tokenizer = @import("tokenizer.zig");
 const std = @import("std");
 const Parse = @import("Parse.zig");
+const Diagnostic = @import("Diagnostic.zig");
 const Ast = @This();
