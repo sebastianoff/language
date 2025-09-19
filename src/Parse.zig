@@ -8,6 +8,10 @@ pub fn init(ast: *Ast) Parse {
     return .{ .ast = ast, .tokens = ast.tokens.slice() };
 }
 
+pub fn deinit(parse: *Parse, allocator: std.mem.Allocator) void {
+    parse.diagnostics.deinit(allocator);
+}
+
 pub const TokenInfo = struct {
     tag: tokenizer.Token.Tag,
     index: u32,
@@ -168,7 +172,9 @@ fn primaryExpression(
     }
 
     parse.appendError(allocator, .parse_expected_expression, before);
-    _ = parse.recoverUntil(sync, .keep);
+    if (before.tag != .semicolon) {
+        _ = parse.recoverUntil(sync, .consume);
+    }
     return try parse.appendNode(
         allocator,
         .{ .tag = .@"error", .token_start = before.index, .token_len = 0, .data = .{ .none = {} } },
@@ -207,6 +213,178 @@ fn match(parse: *Parse, tags: []const tokenizer.Token.Tag) ?TokenInfo {
         }
     }
     return null;
+}
+
+fn expectNodeBasic(n: Ast.Node, tag: Ast.Node.Tag, token_start: u32, token_len: u16) !void {
+    try std.testing.expectEqual(tag, n.tag);
+    try std.testing.expectEqual(token_start, n.token_start);
+    try std.testing.expectEqual(token_len, n.token_len);
+}
+
+test "simple assignment x=1;" {
+    const allocator = std.testing.allocator;
+
+    const tokens = try tokenizer.tokenize(allocator, "x=1;");
+
+    var ast: Ast = .init(tokens);
+    defer ast.deinit(allocator);
+
+    var parse: Parse = .init(&ast);
+    defer parse.deinit(allocator);
+
+    while (!parse.atEnd()) {
+        _ = try parse.statement(allocator);
+    }
+
+    try std.testing.expectEqual(@as(usize, 3), ast.nodes.items.len);
+
+    const id = ast.nodes.items[0];
+    const num = ast.nodes.items[1];
+    const asn = ast.nodes.items[2];
+
+    try expectNodeBasic(id, .identifier, 0, 1); // token 0: identifier x
+    try expectNodeBasic(num, .number_literal, 2, 1); // token 2: number 1
+    try expectNodeBasic(asn, .assign, 0, 4); // spanning tokens [0..4)
+
+    try std.testing.expectEqual(@as(Ast.Node.Index, 0), asn.data.binary_op.lhs);
+    try std.testing.expectEqual(@as(Ast.Node.Index, 1), asn.data.binary_op.rhs);
+
+    try std.testing.expectEqual(@as(usize, 0), parse.diagnostics.items.len);
+}
+
+test "assignment with comment between identifier and = (x//c\\n=1;)" {
+    const allocator = std.testing.allocator;
+
+    // Tokens: 0:id(x), 1:comment, 2:'=', 3:'1', 4:';'
+    const tokens = try tokenizer.tokenize(allocator, "x//c\n=1;");
+
+    var ast: Ast = .init(tokens);
+    defer ast.deinit(allocator);
+
+    var parse: Parse = .init(&ast);
+    defer parse.deinit(allocator);
+    while (!parse.atEnd()) {
+        _ = try parse.statement(allocator);
+    }
+
+    try std.testing.expectEqual(@as(usize, 3), ast.nodes.items.len);
+
+    const id = ast.nodes.items[0];
+    const num = ast.nodes.items[1];
+    const asn = ast.nodes.items[2];
+
+    try expectNodeBasic(id, .identifier, 0, 1);
+    try expectNodeBasic(num, .number_literal, 3, 1);
+    try expectNodeBasic(asn, .assign, 0, 5);
+
+    try std.testing.expectEqual(@as(usize, 0), parse.diagnostics.items.len);
+}
+
+test "assignment missing semicolon (x=1)" {
+    const allocator = std.testing.allocator;
+
+    const tokens = try tokenizer.tokenize(allocator, "x=1");
+
+    var ast: Ast = .init(tokens);
+    defer ast.deinit(allocator);
+
+    var parse: Parse = .init(&ast);
+    defer parse.deinit(allocator);
+    while (!parse.atEnd()) {
+        _ = try parse.statement(allocator);
+    }
+
+    try std.testing.expectEqual(@as(usize, 3), ast.nodes.items.len);
+
+    const id = ast.nodes.items[0];
+    const num = ast.nodes.items[1];
+    const asn = ast.nodes.items[2];
+
+    try expectNodeBasic(id, .identifier, 0, 1);
+    try expectNodeBasic(num, .number_literal, 2, 1);
+    try expectNodeBasic(asn, .assign, 0, 3); // no semicolon, end at tokens.len
+
+    try std.testing.expectEqual(@as(usize, 1), parse.diagnostics.items.len);
+    try std.testing.expectEqual(Diagnostic.Tag.parse_expected_semicolon, parse.diagnostics.items[0].tag);
+}
+
+test "missing RHS (x = ;)" {
+    const allocator = std.testing.allocator;
+
+    const tokens = try tokenizer.tokenize(allocator, "x=;");
+
+    var ast: Ast = .init(tokens);
+    defer ast.deinit(allocator);
+
+    var parse: Parse = .init(&ast);
+    defer parse.deinit(allocator);
+    while (!parse.atEnd()) {
+        _ = try parse.statement(allocator);
+    }
+
+    try std.testing.expectEqual(@as(usize, 3), ast.nodes.items.len);
+
+    const id = ast.nodes.items[0];
+    const err = ast.nodes.items[1];
+    const asn = ast.nodes.items[2];
+
+    try expectNodeBasic(id, .identifier, 0, 1);
+    try expectNodeBasic(err, .@"error", 2, 0); // error at semicolon
+    try expectNodeBasic(asn, .assign, 0, 3);
+
+    try std.testing.expectEqual(@as(usize, 1), parse.diagnostics.items.len);
+    try std.testing.expectEqual(Diagnostic.Tag.parse_expected_expression, parse.diagnostics.items[0].tag);
+}
+
+test "invalid RHS token (x = &;)" {
+    const allocator = std.testing.allocator;
+
+    const tokens = try tokenizer.tokenize(allocator, "x=&;");
+
+    var ast: Ast = .init(tokens);
+    defer ast.deinit(allocator);
+
+    var parse: Parse = .init(&ast);
+    defer parse.deinit(allocator);
+    while (!parse.atEnd()) {
+        _ = try parse.statement(allocator);
+    }
+
+    try std.testing.expectEqual(@as(usize, 3), ast.nodes.items.len);
+
+    const id = ast.nodes.items[0];
+    const err = ast.nodes.items[1];
+    const asn = ast.nodes.items[2];
+
+    try expectNodeBasic(id, .identifier, 0, 1);
+    try expectNodeBasic(err, .@"error", 2, 0); // error at invalid_character '&'
+    try expectNodeBasic(asn, .assign, 0, 4);
+
+    try std.testing.expectEqual(@as(usize, 1), parse.diagnostics.items.len);
+    try std.testing.expectEqual(Diagnostic.Tag.parse_expected_expression, parse.diagnostics.items[0].tag);
+}
+
+test "statement starting with a number" {
+    const allocator = std.testing.allocator;
+
+    const tokens = try tokenizer.tokenize(allocator, "42;");
+
+    var ast: Ast = .init(tokens);
+    defer ast.deinit(allocator);
+
+    var parse: Parse = .init(&ast);
+    defer parse.deinit(allocator);
+    while (!parse.atEnd()) {
+        _ = try parse.statement(allocator);
+    }
+
+    try std.testing.expectEqual(@as(usize, 1), ast.nodes.items.len);
+
+    const err = ast.nodes.items[0];
+    try expectNodeBasic(err, .@"error", 0, 0);
+
+    try std.testing.expectEqual(@as(usize, 1), parse.diagnostics.items.len);
+    try std.testing.expectEqual(Diagnostic.Tag.parse_expected_statement, parse.diagnostics.items[0].tag);
 }
 
 const std = @import("std");
