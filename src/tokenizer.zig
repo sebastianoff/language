@@ -11,6 +11,10 @@ pub const Token = struct {
         pub fn init(start: u32, len: u32) Span {
             return .{ .start = start, .len = len };
         }
+
+        pub fn slice(self: Span, source: []const u8) []const u8 {
+            return source[self.start .. self.start + self.len];
+        }
     };
 
     // zig fmt: off
@@ -60,13 +64,10 @@ pub fn tokenize(allocator: std.mem.Allocator, source: []const u8) std.mem.Alloca
     while (cursor < source.len) {
         const c = source[cursor];
 
-        if (c == ' ' or c == '\n' or c == '\t' or c == '\r') {
+        if (std.ascii.isWhitespace(c)) {
             cursor += 1;
-            while (cursor < source.len) {
-                const w = source[cursor];
-                if (w == ' ' or w == '\n' or w == '\t' or w == '\r') {
-                    cursor += 1;
-                } else break;
+            while (cursor < source.len and std.ascii.isWhitespace(source[cursor])) {
+                cursor += 1;
             }
             continue;
         }
