@@ -4,7 +4,7 @@ pub fn main() !void {
         .zig_version = builtin.zig_version_string,
         .mode = @tagName(builtin.mode),
     });
-    const source = "hello_123 = 456; // an unknown token type";
+    const source = "hello_123  456; // an unknown token type";
     const allocator = std.heap.page_allocator;
 
     std.debug.print("source:\n---\n{s}\n---\n", .{source});

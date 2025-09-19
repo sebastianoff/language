@@ -32,6 +32,13 @@ pub fn initRoot(allocator: std.mem.Allocator, source: []const u8) !Ast {
     parse.ast.nodes.items[0].data.list.len = @intCast(list_end_index - list_start_index);
     parse.ast.nodes.items[0].token_len = @intCast(parse.tokens.len);
 
+    if (parse.diagnostics.items.len > 0) {
+        std.log.err("parsing failed with {[errors]d} errors:", .{ .errors = parse.diagnostics.items.len });
+    }
+    for (parse.diagnostics.items) |diagnostic| {
+        std.log.err("{[diagnostic]s}", .{ .diagnostic = @tagName(diagnostic.tag) });
+    }
+
     return ast;
 }
 
@@ -57,6 +64,7 @@ pub const Node = struct {
         assign,
         identifier,
         number_literal,
+        @"error",
     };
 
     pub const Data = extern union {
