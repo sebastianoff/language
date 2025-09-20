@@ -285,6 +285,10 @@ pub const Writer = struct {
     }
 };
 
+pub fn tokenSlice(ast: *const Ast, index: u32, source: []const u8) []const u8 {
+    return ast.tokens.items(.span)[index].slice(source);
+}
+
 pub inline fn binaryPrecedence(tag: Ast.Node.Tag) u8 {
     return switch (tag) {
         .mul, .div, .mod => 50,

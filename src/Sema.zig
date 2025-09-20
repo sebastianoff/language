@@ -58,7 +58,7 @@ fn declare(sema: *Sema, allocator: std.mem.Allocator, lhs: Ast.Node.Index) std.m
         return; // malformed lhs
     }
     const index = node.token_start;
-    const name = sema.tokenSlice(index);
+    const name = sema.ast.tokenSlice(index, sema.source);
     const gop = try sema.declarations.getOrPut(allocator, name);
     if (!gop.found_existing) {
         gop.value_ptr.* = index;
@@ -78,7 +78,7 @@ fn checkExpressionUses(sema: *Sema, allocator: std.mem.Allocator, index: Ast.Nod
         .number_literal, .@"error" => return,
         .identifier => {
             const token = node.token_start;
-            const name = sema.tokenSlice(token);
+            const name = sema.ast.tokenSlice(token, sema.source);
             if (sema.declarations.get(name) == null) {
                 try sema.diagnostics.append(allocator, .{
                     .tag = .sema_undeclared_identifier,
@@ -98,10 +98,6 @@ fn checkExpressionUses(sema: *Sema, allocator: std.mem.Allocator, index: Ast.Nod
         },
         .root => {}, // not expected inside expressions
     }
-}
-
-fn tokenSlice(sema: *Sema, index: u32) []const u8 {
-    return sema.tokens.items(.span)[index].slice(sema.source);
 }
 
 test "empty input -> no diagnostics" {

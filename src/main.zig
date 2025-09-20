@@ -4,7 +4,7 @@ pub fn main() !void {
         .zig_version = builtin.zig_version_string,
         .mode = @tagName(builtin.mode),
     });
-    const source = "hello_123 = 456; // an unknown token type";
+    const source = "hello_123 = 456_000;";
     const allocator = std.heap.page_allocator;
 
     std.debug.print("============ source: =============\n{[source]s}\n", .{ .source = source });
@@ -36,6 +36,41 @@ pub fn main() !void {
     var ast: libn.Ast = try .initRoot(allocator, source);
     defer ast.deinit(allocator);
     std.debug.print("{[ast]s}", .{ .ast = try ast.renderToOwnedSlice(allocator, source, .{}) });
+
+    var mod: libn.Ir.Module = try .init(allocator, &ast, source);
+    defer mod.deinit(allocator);
+
+    std.debug.print("\n============ IR: =============\n", .{});
+    const stderr = std.debug.lockStderrWriter(&.{});
+    defer std.debug.unlockStderrWriter();
+    try mod.disassemble(stderr);
+
+    var prog: libn.Ir.Program = try .init(allocator, &mod);
+    defer prog.deinit(allocator);
+
+    std.debug.print("\n============ bytecode: =============\n", .{});
+    try prog.disassemble(stderr);
+
+    var state: libn.State = try .init(allocator, &prog);
+    defer state.deinit(allocator);
+
+    std.debug.print("\n============ eval: globals =============\n", .{});
+    libn.dumpAll(state.globals);
+
+    const ops = prog.code.items(.op);
+    const dsts = prog.code.items(.dst);
+    var last_res: ?u32 = null;
+    var i: usize = ops.len;
+    while (i > 0) : (i -= 1) {
+        if (ops[i - 1] != .store) {
+            last_res = dsts[i - 1];
+            break;
+        }
+    }
+    if (last_res) |r| {
+        std.debug.print("\n============ eval: last register =============\n", .{});
+        libn.dumpValue("last", state.regs[r]);
+    }
 }
 
 const libn = @import("libn");
