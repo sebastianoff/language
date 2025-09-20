@@ -3,6 +3,7 @@ pub const version = std.SemanticVersion.parse(version_string) catch unreachable;
 pub const tokenizer = @import("tokenizer.zig");
 pub const Parse = @import("Parse.zig");
 pub const Ast = @import("Ast.zig");
+pub const Sema = @import("Sema.zig");
 
 test {
     std.testing.refAllDeclsRecursive(@This());

@@ -99,6 +99,9 @@ pub const Tag = enum {
     parse_expected_semicolon,
     parse_expected_expression,
     parse_expected_statement,
+    // semantic analysis
+    sema_redeclaration,
+    sema_undeclared_identifier,
 };
 
 const std = @import("std");

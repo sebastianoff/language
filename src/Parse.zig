@@ -164,11 +164,18 @@ fn primaryExpression(
     comptime sync: []const tokenizer.Token.Tag,
 ) std.mem.Allocator.Error!Ast.Node.Index {
     const before = parse.peek(.{});
-    if (parse.match(&.{.number})) |token| {
-        return parse.appendNode(
-            allocator,
-            .{ .tag = .number_literal, .token_start = token.index, .token_len = 1, .data = .{ .none = {} } },
-        );
+    if (parse.match(&.{ .number, .identifier })) |token| {
+        const tag: Ast.Node.Tag = switch (token.tag) {
+            .number => .number_literal,
+            .identifier => .identifier,
+            else => unreachable,
+        };
+        return parse.appendNode(allocator, .{
+            .tag = tag,
+            .token_start = token.index,
+            .token_len = 1,
+            .data = .{ .none = {} },
+        });
     }
 
     parse.appendError(allocator, .parse_expected_expression, before);
