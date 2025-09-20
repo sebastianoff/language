@@ -1,6 +1,8 @@
 pub const version_string = build_options.version;
 pub const version = std.SemanticVersion.parse(version_string) catch unreachable;
 pub const tokenizer = @import("tokenizer.zig");
+pub const binary = @import("binary.zig");
+pub const mem = @import("mem.zig");
 pub const Parse = @import("Parse.zig");
 pub const Ast = @import("Ast.zig");
 pub const Sema = @import("Sema.zig");

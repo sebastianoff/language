@@ -71,6 +71,28 @@ pub fn main() !void {
         std.debug.print("\n============ eval: last register =============\n", .{});
         libn.dumpValue("last", state.regs[r]);
     }
+
+    const out_filename = "out.nb";
+    {
+        const file = try std.fs.cwd().createFile(out_filename, .{ .truncate = true });
+        defer file.close();
+        try libn.binary.writeProgramToFile(file, &prog, .{});
+        std.debug.print("\nwrote program to '{s}'\n", .{out_filename});
+    }
+
+    std.debug.print("\n============ reading binary: =============\n", .{});
+    const read_file = try std.fs.cwd().openFile(out_filename, .{});
+    defer read_file.close();
+
+    var view: libn.binary.View = try .init(read_file, .{});
+    defer view.deinit();
+
+    std.debug.print("constants from view ({d}):\n", .{view.constantsLen()});
+    const view_constants = try view.materializeConstants(allocator);
+    defer allocator.free(view_constants);
+    for (view_constants, 0..) |c, j| {
+        std.debug.print("  c[{d}]: {d}\n", .{ j, c });
+    }
 }
 
 const libn = @import("libn");
