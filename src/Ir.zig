@@ -231,18 +231,18 @@ pub const Module = struct {
         return m;
     }
 
-    pub fn deinit(self: *Module, allocator: std.mem.Allocator) void {
-        self.instructions.deinit(allocator);
-        self.constants.deinit(allocator);
-        self.name_to_slot.deinit(allocator);
-        self.* = undefined;
+    pub fn deinit(module: *Module, allocator: std.mem.Allocator) void {
+        module.instructions.deinit(allocator);
+        module.constants.deinit(allocator);
+        module.name_to_slot.deinit(allocator);
+        module.* = undefined;
     }
 
-    pub fn disassemble(self: *const Module, w: *std.Io.Writer) std.Io.Writer.Error!void {
-        const ops = self.instructions.items(.op);
-        const as_ = self.instructions.items(.a);
-        const bs = self.instructions.items(.b);
-        const aux = self.instructions.items(.aux);
+    pub fn disassemble(module: *const Module, w: *std.Io.Writer) std.Io.Writer.Error!void {
+        const ops = module.instructions.items(.op);
+        const as_ = module.instructions.items(.a);
+        const bs = module.instructions.items(.b);
+        const aux = module.instructions.items(.aux);
 
         try w.writeAll("ir:\n");
         var i: usize = 0;
@@ -253,7 +253,7 @@ pub const Module = struct {
                     i,
                     operations.mnemonic(op),
                     aux[i],
-                    self.constants.items[aux[i]],
+                    module.constants.items[aux[i]],
                 }),
                 .load => try w.print("{d}: {s} r{d} <- slot[{d}]\n", .{
                     i,
