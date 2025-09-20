@@ -80,18 +80,20 @@ fn checkExpressionUses(sema: *Sema, allocator: std.mem.Allocator, index: Ast.Nod
             const token = node.token_start;
             const name = sema.tokenSlice(token);
             if (sema.declarations.get(name) == null) {
-                try sema.diagnostics.append(
-                    allocator,
-                    .{
-                        .tag = .sema_undeclared_identifier,
-                        .index = token,
-                        .got = sema.tokens.items(.tag)[token],
-                    },
-                );
+                try sema.diagnostics.append(allocator, .{
+                    .tag = .sema_undeclared_identifier,
+                    .index = token,
+                    .got = sema.tokens.items(.tag)[token],
+                });
             }
         },
         .assign => {
-            // only the rhs is a use
+            // only the RHS is a use
+            try sema.checkExpressionUses(allocator, node.data.binary_op.rhs);
+        },
+        // check both sides for all other bin ops
+        .add, .sub, .mul, .div, .mod, .less, .less_equal, .greater, .greater_equal, .equal_equal, .not_equal, .@"and", .@"or", .pipe, .pipe_greater, .less_pipe, .range => {
+            try sema.checkExpressionUses(allocator, node.data.binary_op.lhs);
             try sema.checkExpressionUses(allocator, node.data.binary_op.rhs);
         },
         .root => {}, // not expected inside expressions

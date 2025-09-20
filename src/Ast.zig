@@ -138,19 +138,6 @@ pub const Writer = struct {
     fn writeInline(writer: *Writer, index: Ast.Node.Index) std.Io.Writer.Error!void {
         const node = writer.ast.nodes.items[index];
         switch (node.tag) {
-            .assign => {
-                const lhs = node.data.binary_op.lhs;
-                const rhs = node.data.binary_op.rhs;
-                // lhs
-                try writer.writeInline(lhs);
-                // " = "
-                try writer.w.writeAll("=");
-                // rhs
-                try writer.writeInline(rhs);
-            },
-            .identifier, .number_literal => {
-                try writer.writeNodeSpan(node);
-            },
             .root => {
                 var i = node.data.list.start;
                 const end = i + node.data.list.len;
@@ -166,10 +153,61 @@ pub const Writer = struct {
                     try writer.writeInline(i);
                 }
             },
-            .@"error" => {
-                try writer.w.writeAll("<error>");
+            else => {
+                // expressions
+                try writer.writeExpr(index, 0);
             },
         }
+    }
+
+    fn writeExpr(writer: *Writer, index: Ast.Node.Index, parent_prec: u8) std.Io.Writer.Error!void {
+        const node = writer.ast.nodes.items[index];
+        // leaves and error
+        switch (node.tag) {
+            .identifier, .number_literal => {
+                try writer.writeNodeSpan(node);
+                return;
+            },
+            .@"error" => {
+                try writer.w.writeAll("<error>");
+                return;
+            },
+            else => {},
+        }
+        // binary
+        if (isBinaryTag(node.tag)) {
+            const this_prec = binaryPrecedence(node.tag);
+            const need_paren = this_prec < parent_prec;
+
+            if (need_paren) try writer.w.writeAll("(");
+
+            const lhs = node.data.binary_op.lhs;
+            const rhs = node.data.binary_op.rhs;
+            // lhs
+            const lhs_tag = writer.ast.nodes.items[lhs].tag;
+            if (isBinaryTag(lhs_tag) and binaryPrecedence(lhs_tag) < this_prec) {
+                try writer.w.writeAll("(");
+                try writer.writeExpr(lhs, 0);
+                try writer.w.writeAll(")");
+            } else {
+                try writer.writeExpr(lhs, this_prec);
+            }
+            // lexeme
+            try writer.w.writeAll(opMnemonic(node.tag));
+            // rhs
+            const rhs_tag = writer.ast.nodes.items[rhs].tag;
+            if (isBinaryTag(rhs_tag) and binaryPrecedence(rhs_tag) < this_prec) {
+                try writer.w.writeAll("(");
+                try writer.writeExpr(rhs, 0);
+                try writer.w.writeAll(")");
+            } else {
+                try writer.writeExpr(rhs, this_prec);
+            }
+
+            if (need_paren) try writer.w.writeAll(")");
+            return;
+        }
+        try writer.writeNodeSpan(node);
     }
 
     fn writeIndent(writer: *Writer) std.Io.Writer.Error!void {
@@ -194,15 +232,101 @@ pub const Writer = struct {
         }
     }
 
-    fn isTopLevel(tag: Ast.Node.Tag) bool {
+    inline fn isTopLevel(tag: Ast.Node.Tag) bool {
         return switch (tag) {
             .assign => true,
             .identifier, .number_literal => false,
             .root => false,
             .@"error" => false,
+            .add, .sub, .mul, .div, .mod, .less, .less_equal, .greater, .greater_equal, .equal_equal, .not_equal, .@"and", .@"or", .pipe, .pipe_greater, .less_pipe, .range => false,
+        };
+    }
+    inline fn isBinaryTag(tag: Ast.Node.Tag) bool {
+        return switch (tag) {
+            .assign => true,
+            .add, .sub, .mul, .div, .mod => true,
+            .less, .less_equal, .greater, .greater_equal => true,
+            .equal_equal, .not_equal => true,
+            .@"and", .@"or" => true,
+            .pipe, .pipe_greater, .less_pipe => true,
+            .range => true,
+            else => false,
+        };
+    }
+
+    inline fn opMnemonic(tag: Ast.Node.Tag) []const u8 {
+        return switch (tag) {
+            .assign => "=",
+            .add => "+",
+            .sub => "-",
+            .mul => "*",
+            .div => "/",
+            .mod => "%",
+
+            .less => "<",
+            .less_equal => "<=",
+            .greater => ">",
+            .greater_equal => ">=",
+
+            .equal_equal => "==",
+            .not_equal => "!=",
+
+            .@"and" => "&&",
+            .@"or" => "||",
+
+            .pipe => "|",
+            .pipe_greater => "|>",
+            .less_pipe => "<|",
+
+            .range => "..",
+
+            else => "?",
         };
     }
 };
+
+pub inline fn binaryPrecedence(tag: Ast.Node.Tag) u8 {
+    return switch (tag) {
+        .mul, .div, .mod => 50,
+        .add, .sub => 40,
+        .less, .less_equal, .greater, .greater_equal => 30,
+        .equal_equal, .not_equal => 25,
+        .range => 22,
+        .pipe_greater, .less_pipe => 21,
+        .pipe => 20,
+        .@"and" => 15,
+        .@"or" => 14,
+        .assign => 10,
+        else => 0,
+    };
+}
+
+pub inline fn binaryTag(tag: tokenizer.Token.Tag) ?Ast.Node.Tag {
+    return switch (tag) {
+        .plus => .add,
+        .minus => .sub,
+        .star => .mul,
+        .slash => .div,
+        .percent => .mod,
+
+        .less => .less,
+        .less_equal => .less_equal,
+        .greater => .greater,
+        .greater_equal => .greater_equal,
+
+        .equal_equal => .equal_equal,
+        .not_equal => .not_equal,
+
+        .amp_amp => .@"and",
+        .pipe_pipe => .@"or",
+        .pipe => .pipe,
+        .pipe_greater => .pipe_greater,
+        .less_pipe => .less_pipe,
+
+        .dot_dot => .range,
+        else => null,
+    };
+}
 
 fn getTokenStart(ast: *const Ast, index: u32) usize {
     return ast.tokens.items(.span)[index].start;
@@ -230,6 +354,24 @@ pub const Node = struct {
         identifier,
         number_literal,
         @"error",
+        // binary operators
+        add,
+        sub,
+        mul,
+        div,
+        mod,
+        less,
+        less_equal,
+        greater,
+        greater_equal,
+        equal_equal,
+        not_equal,
+        @"and",
+        @"or",
+        pipe,
+        pipe_greater,
+        less_pipe,
+        range,
     };
 
     pub const Data = extern union {
